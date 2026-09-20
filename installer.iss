@@ -2,7 +2,7 @@
 ; Modern Inno Setup Installer Script
 
 #define MyAppName "JAJCE"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "leeatschool"
 #define MyAppURL "https://github.com/leeatschool/JAJCE"
 #define MyAppExeName "JAJCE.exe"
@@ -22,7 +22,7 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=LICENSE
 OutputDir=dist
-OutputBaseFilename=JAJCE-v1.1.0-Setup
+OutputBaseFilename=JAJCE-v1.1.1-Setup
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64

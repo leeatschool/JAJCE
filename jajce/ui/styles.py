@@ -129,7 +129,7 @@ QPushButton#DangerButton:hover {
     background-color: #991B1B;
 }
 
-QTableWidget {
+QTableWidget, QTableView {
     background-color: #15181E;
     alternate-background-color: #181B21;
     border: 1px solid #252A34;

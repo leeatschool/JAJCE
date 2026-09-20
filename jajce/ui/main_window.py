@@ -198,6 +198,7 @@ class MainWindow(QMainWindow):
         # Log Drawer (Collapsible)
         self.log_drawer = QPlainTextEdit()
         self.log_drawer.setReadOnly(True)
+        self.log_drawer.setMaximumBlockCount(1000)
         self.log_drawer.setMaximumHeight(140)
         self.log_drawer.setVisible(False)
         bottom_layout.addWidget(self.log_drawer)
