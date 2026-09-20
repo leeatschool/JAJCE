@@ -26,8 +26,13 @@ def create_application() -> QApplication:
     app.setApplicationDisplayName("JAJCE — Just Another JPEG Conversion Engine")
     app.setStyleSheet(DARK_THEME_QSS)
 
-    # Set icon with 10.png as top priority
+    # Set icon with 10.png / assets icon
+    base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
     icon_candidates = [
+        base_dir / "assets" / "icon.ico",
+        base_dir / "assets" / "icon.png",
+        Path(getattr(sys, "_MEIPASS", base_dir)) / "assets" / "icon.ico",
+        Path(getattr(sys, "_MEIPASS", base_dir)) / "assets" / "icon.png",
         Path(r"C:\Users\Aaron\Downloads\writref\10.png"),
         Path(__file__).resolve().parent.parent / "assets" / "icon.ico",
         Path(__file__).resolve().parent.parent / "assets" / "icon.png",

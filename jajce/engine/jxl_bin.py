@@ -14,18 +14,26 @@ class JXLBinaries:
     @classmethod
     def get_bin_dir(cls) -> Path:
         """Returns the project-local bin directory if available."""
-        # Check current working directory or relative to this file
-        current_file_dir = Path(__file__).resolve().parent
-        # jajce/engine -> jajce -> JAJCE -> bin
-        candidates = [
-            current_file_dir.parent.parent / "bin",
-            Path(sys.prefix) / "bin",
-            Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
-        ]
+        if getattr(sys, "frozen", False):
+            base = Path(sys.executable).resolve().parent
+            meipass = Path(getattr(sys, "_MEIPASS", base))
+            candidates = [
+                base / "bin",
+                base / "_internal" / "bin",
+                meipass / "bin",
+            ]
+        else:
+            current_file_dir = Path(__file__).resolve().parent
+            candidates = [
+                current_file_dir.parent.parent / "bin",
+                Path(sys.prefix) / "bin",
+                Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages"
+            ]
+
         for candidate in candidates:
             if candidate.exists() and (candidate / "cjxl.exe").exists():
                 return candidate
-        return current_file_dir.parent.parent / "bin"
+        return candidates[0]
 
     @classmethod
     def find_binary(cls, binary_name: str) -> Optional[str]:

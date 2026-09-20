@@ -68,10 +68,13 @@ class MainWindow(QMainWindow):
             QApplication.setWindowIcon(app_icon)
 
     def _find_icon(self) -> Optional[str]:
+        base_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent.parent
         candidates = [
+            base_dir / "assets" / "icon.ico",
+            base_dir / "assets" / "icon.png",
+            Path(getattr(sys, "_MEIPASS", base_dir)) / "assets" / "icon.ico",
+            Path(getattr(sys, "_MEIPASS", base_dir)) / "assets" / "icon.png",
             Path(r"C:\Users\Aaron\Downloads\writref\10.png"),
-            Path(__file__).resolve().parent.parent.parent / "assets" / "icon.ico",
-            Path(__file__).resolve().parent.parent.parent / "assets" / "icon.png",
             Path(r"C:\Users\Aaron\Downloads\writref.png"),
         ]
         for c in candidates:

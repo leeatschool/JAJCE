@@ -35,11 +35,25 @@
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Installation & Download
 
-### Graphical Interface (GUI)
-Double-click `run_jajce.bat` or run:
+### Windows Installer (Recommended)
+Download the latest **`JAJCE-v1.1.0-Setup.exe`** from [GitHub Releases](https://github.com/leeatschool/JAJCE/releases).
+- Modern guided setup installer with Start Menu and Desktop shortcuts.
+- Fully standalone: bundled with Python runtime, PyTorch, Transformers vision engine, and `libjxl` binaries. No extra dependencies required!
+
+### Portable Release
+Download **`JAJCE-v1.1.0-windows-x64.zip`**, extract anywhere, and run `JAJCE.exe`.
+
+### Running from Source
+If running from source repository:
 ```bash
+# Clone and install dependencies
+git clone https://github.com/leeatschool/JAJCE.git
+cd JAJCE
+pip install -r requirements.txt
+
+# Run GUI
 python main.py
 ```
 
