@@ -55,6 +55,7 @@ class ConversionOptions:
     max_tags: int = 8
     overwrite_existing: bool = True
     output_dir: Optional[str] = None
+    auto_fallback_if_larger: bool = True  # Protect against file bloat on pre-compressed inputs
 
 @dataclass
 class ConversionResult:
@@ -66,6 +67,8 @@ class ConversionResult:
     compression_ratio: float = 0.0
     tags: List[str] = field(default_factory=list)
     error_message: Optional[str] = None
+    fallback_applied: bool = False
+    status_note: Optional[str] = None
 
 class ImageConverter:
     """
@@ -207,6 +210,37 @@ class ImageConverter:
                     error_message=err_msg
                 )
 
+            # Smart Size Safeguard: Check if lossy encoding enlarged the file on JPEG input
+            fallback_applied = False
+            status_note = None
+            if options.mode == "lossy" and is_jpeg and options.auto_fallback_if_larger:
+                current_size = out_p.stat().st_size
+                if current_size >= original_size:
+                    # Attempt lossless JPEG transcoding to avoid file bloat
+                    temp_ll_path = str(out_p) + ".ll_fallback.jxl"
+                    ll_cmd = [cjxl_bin, actual_input, temp_ll_path, "--container=1", "--compress_boxes=0", "-j", "1", "--quiet"]
+                    ll_proc = subprocess.run(ll_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=flags, timeout=60)
+                    if ll_proc.returncode == 0 and os.path.exists(temp_ll_path):
+                        ll_size = os.path.getsize(temp_ll_path)
+                        if ll_size < current_size:
+                            os.replace(temp_ll_path, str(out_p))
+                            fallback_applied = True
+                            saved_kb = (original_size - ll_size) / 1024.0
+                            status_note = (
+                                f"Auto-optimized: Lossy d={options.distance} enlarged file ({current_size:,}B vs {original_size:,}B original) "
+                                f"due to existing JPEG compression noise. Auto-fell back to lossless transcode ({ll_size:,}B, saved {saved_kb:.1f} KB)."
+                            )
+                        else:
+                            try:
+                                os.remove(temp_ll_path)
+                            except Exception:
+                                pass
+                    elif os.path.exists(temp_ll_path):
+                        try:
+                            os.remove(temp_ll_path)
+                        except Exception:
+                            pass
+
             # Inject Tags / Metadata if provided
             final_tags = list(tags) if tags else []
             if final_tags:
@@ -224,7 +258,9 @@ class ImageConverter:
                 original_size=original_size,
                 converted_size=converted_size,
                 compression_ratio=ratio,
-                tags=final_tags
+                tags=final_tags,
+                fallback_applied=fallback_applied,
+                status_note=status_note
             )
 
         except Exception as e:

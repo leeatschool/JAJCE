@@ -92,10 +92,11 @@ class BatchWorker(QThread):
 
             if result.success:
                 success_count += 1
+                note_str = f" [{result.status_note}]" if result.status_note else ""
                 self.log_message.emit(
                     f"Converted: {result.output_path} | "
                     f"Saved: {result.compression_ratio:+.1f}% | "
-                    f"Tags: {len(result.tags)}"
+                    f"Tags: {len(result.tags)}{note_str}"
                 )
             else:
                 error_count += 1

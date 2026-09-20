@@ -87,20 +87,43 @@ class SettingsWidget(QWidget):
         lossy_param_layout = QVBoxLayout(self.lossy_group)
         lossy_param_layout.setSpacing(10)
 
+        # Quick Presets Bar
+        preset_header = QLabel("Quick Compression Presets:")
+        preset_header.setStyleSheet("font-weight: 600; color: #CBD5E1; font-size: 12px;")
+        lossy_param_layout.addWidget(preset_header)
+
+        preset_row = QHBoxLayout()
+        preset_row.setSpacing(6)
+
+        self.btn_preset_web = QPushButton("⚡ Web (d=2.0 / ~80%)")
+        self.btn_preset_web.setToolTip("Recommended for dramatic 40%–70% file size reductions while staying visually pristine.")
+        self.btn_preset_balanced = QPushButton("⚖️ Balanced (d=1.5 / ~85%)")
+        self.btn_preset_balanced.setToolTip("Sweet spot between high visual fidelity and solid file savings (25%–50%).")
+        self.btn_preset_lossless = QPushButton("💎 Lossless Look (d=1.0 / ~90%)")
+        self.btn_preset_lossless.setToolTip("Visually lossless archival quality. Minimal compression difference on already-compressed JPEGs.")
+        self.btn_preset_max = QPushButton("📦 Max Comp (d=3.0 / ~70%)")
+        self.btn_preset_max.setToolTip("Aggressive compression for maximum space savings (60%–80%).")
+
+        for btn in [self.btn_preset_web, self.btn_preset_balanced, self.btn_preset_lossless, self.btn_preset_max]:
+            btn.setStyleSheet("font-size: 11px; padding: 4px 8px;")
+            preset_row.addWidget(btn)
+
+        lossy_param_layout.addLayout(preset_row)
+
         # Target Visual Distance
         dist_header = QHBoxLayout()
         dist_label = QLabel("Visual Distance (JND):")
         dist_label.setToolTip(
             "Target visual distance in Butteraugli JND units.\n"
-            "0.5 - 0.9: Ultra High Quality\n"
-            "1.0: Visually Lossless (Recommended)\n"
-            "1.5 - 2.5: High Quality Web / Sharing\n"
+            "0.5 - 0.9: Ultra High Quality / Archival\n"
+            "1.0: Visually Lossless\n"
+            "1.5 - 2.5: High Quality Web & Sharing (Dramatically Smaller)\n"
             "3.0+: High Compression"
         )
         self.dist_spin = QDoubleSpinBox()
         self.dist_spin.setRange(0.1, 15.0)
         self.dist_spin.setSingleStep(0.1)
-        self.dist_spin.setValue(1.0)
+        self.dist_spin.setValue(1.5)
         dist_header.addWidget(dist_label)
         dist_header.addStretch()
         dist_header.addWidget(self.dist_spin)
@@ -108,8 +131,25 @@ class SettingsWidget(QWidget):
 
         self.dist_slider = QSlider(Qt.Horizontal)
         self.dist_slider.setRange(1, 150)  # 0.1 to 15.0
-        self.dist_slider.setValue(10)
+        self.dist_slider.setValue(15)
         lossy_param_layout.addWidget(self.dist_slider)
+
+        # Target Quality %
+        quality_header = QHBoxLayout()
+        quality_label = QLabel("Equivalent Quality (%):")
+        quality_label.setToolTip("Estimated JPEG-equivalent quality corresponding to the chosen visual distance.")
+        self.quality_spin = QSpinBox()
+        self.quality_spin.setRange(10, 100)
+        self.quality_spin.setValue(85)
+        quality_header.addWidget(quality_label)
+        quality_header.addStretch()
+        quality_header.addWidget(self.quality_spin)
+        lossy_param_layout.addLayout(quality_header)
+
+        self.quality_slider = QSlider(Qt.Horizontal)
+        self.quality_slider.setRange(10, 100)
+        self.quality_slider.setValue(85)
+        lossy_param_layout.addWidget(self.quality_slider)
 
         # Effort
         effort_header = QHBoxLayout()
@@ -128,11 +168,37 @@ class SettingsWidget(QWidget):
         self.effort_slider.setValue(7)
         lossy_param_layout.addWidget(self.effort_slider)
 
-        # Progressive
+        # Smart Safeguard & Progressive
+        self.check_auto_fallback = QCheckBox("Auto-optimize if lossy output exceeds source file size")
+        self.check_auto_fallback.setChecked(True)
+        self.check_auto_fallback.setToolTip(
+            "If an already-compressed JPEG expands due to compression noise at the chosen quality,\n"
+            "automatically falls back to lossless JPEG transcoding so the output is never larger than the source."
+        )
+        lossy_param_layout.addWidget(self.check_auto_fallback)
+
         self.check_progressive = QCheckBox("Enable Progressive Decoding (-p)")
         self.check_progressive.setChecked(False)
         self.check_progressive.setToolTip("Enables responsive multi-resolution progressive rendering.")
         lossy_param_layout.addWidget(self.check_progressive)
+
+        # Tip Callout Frame
+        tip_frame = QFrame()
+        tip_frame.setStyleSheet(
+            "background-color: #1A212D; border-left: 3px solid #38BDF8; "
+            "border-radius: 4px; padding: 6px 10px; margin-top: 4px;"
+        )
+        tip_layout = QVBoxLayout(tip_frame)
+        tip_layout.setContentsMargins(4, 4, 4, 4)
+        lbl_tip = QLabel(
+            "💡 <b>Compression Tip:</b> Distance 1.0 (Q=90) is visually lossless and preserves the exact noise of input pixels. "
+            "On pre-compressed JPEGs, this spends bits encoding existing block/ringing artifacts, giving little savings or slight enlargement.<br>"
+            "For <b>dramatic 40–70% reductions</b>, use <b>⚡ Web (d=2.0 / ~80%)</b>."
+        )
+        lbl_tip.setWordWrap(True)
+        lbl_tip.setStyleSheet("color: #94A3B8; font-size: 11px;")
+        tip_layout.addWidget(lbl_tip)
+        lossy_param_layout.addWidget(tip_frame)
 
         layout.addWidget(self.lossy_group)
 
@@ -212,8 +278,17 @@ class SettingsWidget(QWidget):
         self.radio_lossless.toggled.connect(self._on_mode_toggled)
         self.radio_lossy.toggled.connect(self._on_mode_toggled)
 
-        self.dist_slider.valueChanged.connect(lambda v: self.dist_spin.setValue(v / 10.0))
-        self.dist_spin.valueChanged.connect(lambda v: self.dist_slider.setValue(int(v * 10)))
+        self._syncing = False
+
+        self.btn_preset_web.clicked.connect(lambda: self._apply_preset(2.0, 80))
+        self.btn_preset_balanced.clicked.connect(lambda: self._apply_preset(1.5, 85))
+        self.btn_preset_lossless.clicked.connect(lambda: self._apply_preset(1.0, 90))
+        self.btn_preset_max.clicked.connect(lambda: self._apply_preset(3.0, 70))
+
+        self.dist_slider.valueChanged.connect(self._on_dist_slider_changed)
+        self.dist_spin.valueChanged.connect(self._on_dist_spin_changed)
+        self.quality_slider.valueChanged.connect(self._on_quality_slider_changed)
+        self.quality_spin.valueChanged.connect(self._on_quality_spin_changed)
 
         self.effort_slider.valueChanged.connect(self.effort_spin.setValue)
         self.effort_spin.valueChanged.connect(self.effort_slider.setValue)
@@ -223,6 +298,60 @@ class SettingsWidget(QWidget):
         self.btn_test_tag.clicked.connect(self.request_test_tagging.emit)
 
         self._on_mode_toggled()
+
+    def _apply_preset(self, distance: float, quality: int):
+        self._syncing = True
+        self.dist_spin.setValue(distance)
+        self.dist_slider.setValue(int(distance * 10))
+        self.quality_spin.setValue(quality)
+        self.quality_slider.setValue(quality)
+        self._syncing = False
+        self.settings_changed.emit()
+
+    def _on_dist_slider_changed(self, v: int):
+        if self._syncing:
+            return
+        self._syncing = True
+        d = v / 10.0
+        self.dist_spin.setValue(d)
+        q = max(10, min(100, int(round(100 - (d - 0.1) / 0.09))))
+        self.quality_spin.setValue(q)
+        self.quality_slider.setValue(q)
+        self._syncing = False
+        self.settings_changed.emit()
+
+    def _on_dist_spin_changed(self, d: float):
+        if self._syncing:
+            return
+        self._syncing = True
+        self.dist_slider.setValue(int(d * 10))
+        q = max(10, min(100, int(round(100 - (d - 0.1) / 0.09))))
+        self.quality_spin.setValue(q)
+        self.quality_slider.setValue(q)
+        self._syncing = False
+        self.settings_changed.emit()
+
+    def _on_quality_slider_changed(self, q: int):
+        if self._syncing:
+            return
+        self._syncing = True
+        self.quality_spin.setValue(q)
+        d = max(0.1, min(15.0, round(0.1 + (100 - q) * 0.09, 2)))
+        self.dist_spin.setValue(d)
+        self.dist_slider.setValue(int(d * 10))
+        self._syncing = False
+        self.settings_changed.emit()
+
+    def _on_quality_spin_changed(self, q: int):
+        if self._syncing:
+            return
+        self._syncing = True
+        self.quality_slider.setValue(q)
+        d = max(0.1, min(15.0, round(0.1 + (100 - q) * 0.09, 2)))
+        self.dist_spin.setValue(d)
+        self.dist_slider.setValue(int(d * 10))
+        self._syncing = False
+        self.settings_changed.emit()
 
     def _on_mode_toggled(self):
         is_lossy = self.radio_lossy.isChecked()
@@ -245,6 +374,7 @@ class SettingsWidget(QWidget):
         return ConversionOptions(
             mode="lossy" if self.radio_lossy.isChecked() else "lossless",
             distance=self.dist_spin.value(),
+            quality=self.quality_spin.value(),
             use_distance=True,
             effort=self.effort_spin.value(),
             progressive=self.check_progressive.isChecked(),
@@ -252,5 +382,6 @@ class SettingsWidget(QWidget):
             ai_prompt=self.edit_tag_prompt.text().strip(),
             max_tags=self.spin_max_tags.value(),
             overwrite_existing=self.check_overwrite.isChecked(),
-            output_dir=out_dir if out_dir else None
+            output_dir=out_dir if out_dir else None,
+            auto_fallback_if_larger=self.check_auto_fallback.isChecked()
         )

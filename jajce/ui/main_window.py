@@ -343,7 +343,13 @@ class MainWindow(QMainWindow):
             self.preview_widget.update_tags(tags)
 
     def _on_item_finished(self, path_str: str, result: ConversionResult):
-        status = "Finished" if result.success else "Error"
+        if not result.success:
+            status = "Error"
+        elif result.fallback_applied:
+            status = "Optimized (Lossless)"
+        else:
+            status = "Finished"
+
         self.queue_widget.update_item_status(
             path_str,
             status=status,
