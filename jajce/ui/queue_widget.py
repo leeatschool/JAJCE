@@ -44,6 +44,7 @@ class QueueWidget(QWidget):
     """
     queue_changed = Signal(int)  # Emits current count
     selection_changed = Signal(str)  # Emits selected input path
+    request_tag_item = Signal(str)   # Emits input path to trigger AI tagging
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -309,6 +310,7 @@ class QueueWidget(QWidget):
         action_open_img = menu.addAction("Open Original Image")
         action_open_folder = menu.addAction("Show in File Explorer")
         menu.addSeparator()
+        action_ai_tag = menu.addAction("🔍 Identify Tags with AI (SmolVLM)")
         action_edit_tags = menu.addAction("Edit / Add Tags Manually...")
         menu.addSeparator()
         action_remove = menu.addAction("Remove from Queue")
@@ -318,6 +320,8 @@ class QueueWidget(QWidget):
             os.startfile(input_path)
         elif chosen == action_open_folder:
             os.system(f'explorer /select,"{input_path}"')
+        elif chosen == action_ai_tag:
+            self.request_tag_item.emit(input_path)
         elif chosen == action_edit_tags:
             current = ", ".join(q_item.tags)
             text, ok = QInputDialog.getText(

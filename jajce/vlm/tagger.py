@@ -39,10 +39,10 @@ class SmolVLMTagger:
             try:
                 self.is_loading = True
                 if status_callback:
-                    status_callback("Loading PyTorch and Vision-Language Model...")
+                    status_callback("Loading PyTorch & Vision-Language Model...")
 
                 import torch
-                # Optimize CPU thread allocation
+                # Optimize CPU thread allocation for fast inference
                 cpu_threads = max(1, min(os.cpu_count() or 4, 8))
                 torch.set_num_threads(cpu_threads)
 
@@ -95,45 +95,61 @@ class SmolVLMTagger:
                 pass
 
     def extract_tags_from_text(self, text: str, max_tags: int = 8) -> List[str]:
-        """Cleans and standardizes generated text into a list of concise tags."""
+        """
+        Cleans and standardizes generated text into a list of concise tags.
+        Handles both comma-separated lists and descriptive natural language responses.
+        """
         if not text:
             return []
 
-        # Remove common preamble phrases
-        cleaned = re.sub(r"^(items|objects|tags|the image shows|this image contains|in this photo|we can see|identified items|depicted are|key objects:?)\s*:?", "", text, flags=re.IGNORECASE).strip()
-        cleaned = cleaned.replace("\n", ", ").replace(";", ",")
-        cleaned = re.sub(r"[\.!\?]", ", ", cleaned)
+        # If model returned direct comma-separated tags
+        if "," in text and not re.search(r"\b(the image|in this|we can see|displays a|features a)\b", text, re.IGNORECASE):
+            raw = [t.strip().lower() for t in text.split(",") if t.strip()]
+            valid = []
+            for t in raw:
+                cleaned_t = re.sub(r"[^a-zA-Z0-9\s\-]", "", t).strip()
+                if cleaned_t and len(cleaned_t) >= 2 and cleaned_t not in valid:
+                    valid.append(cleaned_t)
+            if valid:
+                return valid[:max_tags]
 
-        # Split on commas
-        raw_items = [item.strip() for item in cleaned.split(",") if item.strip()]
+        # For descriptive sentences, clean preamble boilerplate
+        cleaned = re.sub(
+            r"(?i)\b(the image displays a piece of|the image features a|the image contains a|"
+            r"in the center of the image is a|which appears to be|which is a|which makes the|"
+            r"symbol of|appears to be|there is a|there are|the primary focus is on the|"
+            r"in the background|in the foreground)\b",
+            "",
+            text
+        )
 
-        # Filter stop words and punctuation
+        chunks = re.split(r"[\.,;\n]", cleaned)
+        tags = []
         stop_words = {
-            "a", "an", "the", "and", "or", "in", "on", "at", "of", "with",
-            "this", "that", "these", "those", "photo", "image", "picture",
-            "combination", "focus", "primary", "background", "foreground",
-            "element", "elements"
+            "the", "a", "an", "and", "or", "in", "on", "at", "of", "with", "to",
+            "is", "are", "was", "this", "that", "these", "those", "image", "picture",
+            "photo", "simple", "piece", "combination", "style", "stand", "out", "prominently"
         }
 
-        tags = []
-        for raw in raw_items:
-            # Remove leading bullet points, numbers, asterisks
-            item = re.sub(r"^[\d\.\-\*\•\s]+", "", raw).strip().lower()
-            if not item or item in stop_words or len(item) < 2 or len(item) > 35:
-                continue
+        for c in chunks:
+            c = re.sub(r"[^a-zA-Z0-9\s\-]", " ", c).strip().lower()
+            words = [w for w in c.split() if w and w not in stop_words]
+            if words:
+                # Capture concise noun phrase (up to 3 words)
+                phrase = " ".join(words[:3])
+                if len(phrase) >= 2 and phrase not in tags:
+                    tags.append(phrase)
+                # Also include notable single nouns if long enough
+                for w in words[:2]:
+                    if len(w) >= 4 and w not in tags and w not in phrase:
+                        tags.append(w)
 
-            # Check if this item is a sentence or contains stop phrases
-            words = item.split()
-            if len(words) > 4:
-                # Truncate long multi-word explanations
-                continue
+        # Fallback if no tags could be extracted
+        if not tags and text.strip():
+            words = [w.lower() for w in re.findall(r"\b[a-zA-Z]{3,}\b", text) if w.lower() not in stop_words]
+            tags = list(dict.fromkeys(words))
 
-            if item not in tags:
-                tags.append(item)
-            if len(tags) >= max_tags:
-                break
-
-        return tags
+        return tags[:max_tags]
 
     def tag_image(
         self,
@@ -155,15 +171,19 @@ class SmolVLMTagger:
 
             p = Path(image_path)
             if not p.exists():
+                if status_callback:
+                    status_callback(f"Image not found: {image_path}")
                 return []
 
+            if status_callback:
+                status_callback(f"Preparing image: {p.name}...")
+
             with Image.open(p) as img:
-                # Convert to RGB and scale to efficient resolution
+                # Convert to RGB and scale to 384x384 for optimal CPU performance
                 rgb_img = img.convert("RGB")
-                # Using 384x384 maximizes inference speed on CPU while preserving detail
                 rgb_img.thumbnail((384, 384))
 
-                default_instruction = "List the main items, objects, and subjects in this photo as a comma-separated list of short tags:"
+                default_instruction = "Describe the main objects, subjects, text, and visual elements in this image:"
                 user_text = custom_prompt.strip() if custom_prompt and custom_prompt.strip() else default_instruction
 
                 messages = [
@@ -176,14 +196,20 @@ class SmolVLMTagger:
                     }
                 ]
 
+                if status_callback:
+                    status_callback("Tokenizing inputs & image patches...")
+
                 inputs = self.processor.apply_chat_template(messages, add_generation_prompt=True)
                 model_inputs = self.processor(text=inputs, images=[rgb_img], return_tensors="pt")
                 model_inputs = {k: v.to(self.device) for k, v in model_inputs.items()}
 
+                if status_callback:
+                    status_callback("Generating visual identifications with SmolVLM...")
+
                 with torch.no_grad():
                     generated_ids = self.model.generate(
                         **model_inputs,
-                        max_new_tokens=30,
+                        max_new_tokens=40,
                         do_sample=False,
                         num_beams=1
                     )
@@ -195,7 +221,14 @@ class SmolVLMTagger:
                     skip_special_tokens=True
                 )[0].strip()
 
+                if status_callback:
+                    status_callback("Extracting and standardizing tags...")
+
                 tags = self.extract_tags_from_text(output_text, max_tags=max_tags)
+
+                if status_callback:
+                    status_callback(f"Identified {len(tags)} tags: {', '.join(tags)}")
+
                 return tags
         except Exception as e:
             if status_callback:

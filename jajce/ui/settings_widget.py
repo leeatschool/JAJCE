@@ -3,7 +3,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QRadioButton,
     QButtonGroup, QSlider, QLabel, QSpinBox, QDoubleSpinBox,
-    QCheckBox, QPushButton, QFileDialog, QLineEdit, QFrame
+    QCheckBox, QPushButton, QFileDialog, QLineEdit, QScrollArea,
+    QFrame
 )
 from PySide6.QtCore import Qt, Signal
 
@@ -13,6 +14,7 @@ class SettingsWidget(QWidget):
     """
     Control panel for conversion parameters, lossy/lossless modes,
     SmolVLM tagging options, and output destination.
+    Encapsulated inside a QScrollArea for responsiveness across all screen sizes.
     """
     settings_changed = Signal()
     request_test_tagging = Signal()
@@ -22,8 +24,21 @@ class SettingsWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        # Outer layout containing the scroll area
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Content widget inside scroll area
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(14)
 
         # 1. Mode Selection Group
@@ -42,6 +57,7 @@ class SettingsWidget(QWidget):
         lossless_desc = QLabel(
             "Bit-exact reversible JPEG transcoding + lossless compression for PNG/TIFF/WebP."
         )
+        lossless_desc.setWordWrap(True)
         lossless_desc.setStyleSheet("color: #64748B; font-size: 11px; margin-left: 24px;")
 
         self.radio_lossy = QRadioButton("Lossy Re-encoding (Fresh Compression)")
@@ -53,6 +69,7 @@ class SettingsWidget(QWidget):
         lossy_desc = QLabel(
             "Fresh JPEG XL lossy re-encoding for dramatically smaller file sizes."
         )
+        lossy_desc.setWordWrap(True)
         lossy_desc.setStyleSheet("color: #64748B; font-size: 11px; margin-left: 24px;")
 
         self.mode_btn_group = QButtonGroup(self)
@@ -96,7 +113,7 @@ class SettingsWidget(QWidget):
 
         # Effort
         effort_header = QHBoxLayout()
-        effort_label = QLabel("Encoding Effort:")
+        effort_label = QLabel("Encoding Effort (1-9):")
         effort_label.setToolTip("Higher effort uses more CPU compute to find smaller file sizes.")
         self.effort_spin = QSpinBox()
         self.effort_spin.setRange(1, 9)
@@ -124,20 +141,17 @@ class SettingsWidget(QWidget):
         tagging_layout = QVBoxLayout(self.tagging_group)
         tagging_layout.setSpacing(10)
 
-        tag_top_row = QHBoxLayout()
         self.check_enable_tagging = QCheckBox("Auto-Identify Items & Write Tags to .jxl")
         self.check_enable_tagging.setChecked(False)
-        self.check_enable_tagging.setStyleSheet("font-weight: 600; color: #38BDF8;")
-        tag_top_row.addWidget(self.check_enable_tagging)
-        tag_top_row.addStretch()
-        tagging_layout.addLayout(tag_top_row)
+        self.check_enable_tagging.setStyleSheet("font-weight: 600; color: #38BDF8; font-size: 13px;")
+        tagging_layout.addWidget(self.check_enable_tagging)
 
-        self.vlm_status_badge = QLabel("Model: Local / Ready")
+        self.vlm_status_badge = QLabel("Model: Local weights ready (CPU)")
         self.vlm_status_badge.setStyleSheet("color: #10B981; font-size: 11px;")
         tagging_layout.addWidget(self.vlm_status_badge)
 
-        prompt_label = QLabel("Tagging Prompt / Instruction:")
-        self.edit_tag_prompt = QLineEdit("List the main items, objects, and subjects in this photo as a comma-separated list of short tags:")
+        prompt_label = QLabel("Instruction Prompt for SmolVLM:")
+        self.edit_tag_prompt = QLineEdit("Describe the main objects, subjects, text, and visual elements in this image:")
         tagging_layout.addWidget(prompt_label)
         tagging_layout.addWidget(self.edit_tag_prompt)
 
@@ -148,11 +162,12 @@ class SettingsWidget(QWidget):
         self.spin_max_tags.setValue(8)
         tag_options_row.addWidget(self.spin_max_tags)
         tag_options_row.addStretch()
-
-        self.btn_test_tag = QPushButton("Test Tagging Selected Image")
-        self.btn_test_tag.setToolTip("Run SmolVLM inference on the selected item in the queue.")
-        tag_options_row.addWidget(self.btn_test_tag)
         tagging_layout.addLayout(tag_options_row)
+
+        self.btn_test_tag = QPushButton("🔍 Test Tagging Selected Image")
+        self.btn_test_tag.setStyleSheet("font-weight: 600; padding: 8px 16px;")
+        self.btn_test_tag.setToolTip("Run SmolVLM inference immediately on the selected item in the queue.")
+        tagging_layout.addWidget(self.btn_test_tag)
 
         layout.addWidget(self.tagging_group)
 
@@ -186,6 +201,12 @@ class SettingsWidget(QWidget):
         output_layout.addWidget(self.check_overwrite)
 
         layout.addWidget(output_group)
+
+        # Bottom stretch so items stay comfortably aligned
+        layout.addStretch()
+
+        self.scroll_area.setWidget(content_widget)
+        outer_layout.addWidget(self.scroll_area)
 
         # Connect signals
         self.radio_lossless.toggled.connect(self._on_mode_toggled)

@@ -11,15 +11,42 @@ QMainWindow, QDialog {
     background-color: #0E1013;
 }
 
+QTabWidget::pane {
+    border: 1px solid #282E39;
+    border-radius: 6px;
+    background-color: #161A22;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: #14171E;
+    color: #94A3B8;
+    border: 1px solid #282E39;
+    border-bottom: none;
+    padding: 8px 18px;
+    margin-right: 4px;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    font-weight: 600;
+}
+
+QTabBar::tab:selected {
+    background-color: #161A22;
+    color: #60A5FA;
+    border-top: 2px solid #3B82F6;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #1C212B;
+    color: #E2E8F0;
+}
+
 QGroupBox {
     background-color: #181B21;
     border: 1px solid #282E39;
     border-radius: 8px;
-    margin-top: 18px;
-    padding-top: 16px;
-    padding-bottom: 12px;
-    padding-left: 12px;
-    padding-right: 12px;
+    margin-top: 20px;
+    padding: 14px 10px 10px 10px;
     font-weight: 600;
     color: #60A5FA;
 }
@@ -27,9 +54,10 @@ QGroupBox {
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 14px;
+    left: 12px;
     padding: 0 6px;
-    background-color: #181B21;
+    background-color: #121418;
+    color: #60A5FA;
 }
 
 QLabel {
@@ -52,6 +80,7 @@ QPushButton {
     border: 1px solid #333C4D;
     border-radius: 6px;
     padding: 7px 16px;
+    min-height: 18px;
     font-weight: 500;
     color: #F1F5F9;
 }
@@ -78,6 +107,7 @@ QPushButton#PrimaryButton {
     font-weight: 600;
     font-size: 14px;
     padding: 9px 24px;
+    min-height: 22px;
 }
 
 QPushButton#PrimaryButton:hover {
@@ -118,6 +148,11 @@ QHeaderView::section {
     font-weight: 600;
     font-size: 12px;
     text-transform: uppercase;
+}
+
+QScrollArea {
+    background: transparent;
+    border: none;
 }
 
 QScrollBar:vertical {
@@ -194,6 +229,7 @@ QRadioButton {
     spacing: 8px;
     color: #E2E8F0;
     font-weight: 500;
+    min-height: 22px;
 }
 
 QRadioButton::indicator {
@@ -212,6 +248,7 @@ QRadioButton::indicator:checked {
 QCheckBox {
     spacing: 8px;
     color: #E2E8F0;
+    min-height: 22px;
 }
 
 QCheckBox::indicator {
@@ -233,6 +270,7 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
     border-radius: 6px;
     padding: 6px 10px;
     color: #F1F5F9;
+    min-height: 20px;
 }
 
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {

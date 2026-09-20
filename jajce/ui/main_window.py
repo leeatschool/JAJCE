@@ -19,6 +19,7 @@ from jajce.ui.settings_widget import SettingsWidget
 from jajce.ui.preview_widget import PreviewWidget
 
 class SingleTagWorker(QThread):
+    progress = Signal(str)
     finished = Signal(str, list)
     error = Signal(str, str)
 
@@ -31,7 +32,13 @@ class SingleTagWorker(QThread):
     def run(self):
         try:
             tagger = SmolVLMTagger.get_instance()
-            tags = tagger.tag_image(self.file_path, custom_prompt=self.prompt, max_tags=self.max_tags)
+            self.progress.emit(f"Loading SmolVLM & analyzing {Path(self.file_path).name}...")
+            tags = tagger.tag_image(
+                self.file_path,
+                custom_prompt=self.prompt,
+                max_tags=self.max_tags,
+                status_callback=self.progress.emit
+            )
             self.finished.emit(self.file_path, tags)
         except Exception as e:
             self.error.emit(self.file_path, str(e))
@@ -50,7 +57,7 @@ class MainWindow(QMainWindow):
 
     def init_window(self):
         self.setWindowTitle("JAJCE — Just Another JPEG Conversion Engine")
-        self.resize(1280, 820)
+        self.resize(1280, 840)
         self.setMinimumSize(960, 640)
 
         # Set Window and Application Icon
@@ -62,12 +69,10 @@ class MainWindow(QMainWindow):
 
     def _find_icon(self) -> Optional[str]:
         candidates = [
+            Path(r"C:\Users\Aaron\Downloads\writref\10.png"),
             Path(__file__).resolve().parent.parent.parent / "assets" / "icon.ico",
             Path(__file__).resolve().parent.parent.parent / "assets" / "icon.png",
             Path(r"C:\Users\Aaron\Downloads\writref.png"),
-            Path(r"C:\Users\Aaron\Downloads\writref\writref.png"),
-            Path(r"C:\Users\Aaron\Downloads\writref\11.png"),
-            Path(r"C:\Users\Aaron\Downloads\writref\1.png"),
         ]
         for c in candidates:
             if c.exists():
@@ -113,7 +118,7 @@ class MainWindow(QMainWindow):
         badges_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.lbl_jxl_badge = QLabel("libjxl: Detecting...")
         self.lbl_jxl_badge.setStyleSheet("color: #38BDF8; font-size: 11px; font-weight: 600;")
-        self.lbl_vlm_badge = QLabel("SmolVLM-256M-Instruct: Ready")
+        self.lbl_vlm_badge = QLabel("SmolVLM-256M-Instruct: Ready (Local)")
         self.lbl_vlm_badge.setStyleSheet("color: #10B981; font-size: 11px; font-weight: 600;")
         badges_layout.addWidget(self.lbl_jxl_badge)
         badges_layout.addWidget(self.lbl_vlm_badge)
@@ -129,16 +134,17 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self.queue_widget)
 
         # Right: Tabs (Settings & Preview)
-        right_container = QTabWidget()
-        right_container.setMinimumWidth(380)
+        self.right_container = QTabWidget()
+        self.right_container.setMinimumWidth(400)
 
         self.settings_widget = SettingsWidget()
         self.preview_widget = PreviewWidget()
 
-        right_container.addTab(self.settings_widget, "Conversion & AI Settings")
-        right_container.addTab(self.preview_widget, "Image & Tags Preview")
+        # Note: Escaped ampersand && ensures literal '&' is rendered
+        self.right_container.addTab(self.settings_widget, "Conversion && AI Settings")
+        self.right_container.addTab(self.preview_widget, "Image && Tags Preview")
 
-        splitter.addWidget(right_container)
+        splitter.addWidget(self.right_container)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         main_layout.addWidget(splitter)
@@ -202,6 +208,7 @@ class MainWindow(QMainWindow):
         self.btn_toggle_log.clicked.connect(self.toggle_log_drawer)
 
         self.queue_widget.selection_changed.connect(self._on_queue_selection_changed)
+        self.queue_widget.request_tag_item.connect(self._tag_specific_item)
         self.settings_widget.request_test_tagging.connect(self.test_tag_selected)
 
     def check_system_binaries(self):
@@ -216,7 +223,6 @@ class MainWindow(QMainWindow):
 
     def log(self, text: str):
         self.log_drawer.appendPlainText(text)
-        # Scroll to bottom
         sb = self.log_drawer.verticalScrollBar()
         sb.setValue(sb.maximum())
 
@@ -230,30 +236,50 @@ class MainWindow(QMainWindow):
         tags = item.tags if item else []
         self.preview_widget.set_image(file_path, tags)
 
-    def test_tag_selected(self):
-        selected_path = self.queue_widget.get_selected_path()
-        if not selected_path:
-            QMessageBox.information(self, "No Image Selected", "Please select an image in the queue table to test tagging.")
-            return
-
+    def _tag_specific_item(self, file_path: str):
         options = self.settings_widget.get_options()
-        self.lbl_status.setText(f"AI Tagging: {Path(selected_path).name}...")
-        self.log(f"Running SmolVLM-256M-Instruct test inference on: {selected_path}")
+        self.lbl_status.setText(f"AI Tagging: {Path(file_path).name}...")
+        self.log(f"Running SmolVLM-256M-Instruct on: {file_path}")
+        self.settings_widget.btn_test_tag.setEnabled(False)
+        self.settings_widget.btn_test_tag.setText("Analyzing Image...")
 
-        self.tag_worker = SingleTagWorker(selected_path, options.ai_prompt, options.max_tags)
+        self.tag_worker = SingleTagWorker(file_path, options.ai_prompt, options.max_tags)
+        self.tag_worker.progress.connect(self._on_single_tag_progress)
         self.tag_worker.finished.connect(self._on_single_tag_finished)
         self.tag_worker.error.connect(self._on_single_tag_error)
         self.tag_worker.start()
 
+    def test_tag_selected(self):
+        selected_path = self.queue_widget.get_selected_path()
+        if not selected_path:
+            QMessageBox.information(
+                self,
+                "No Image Selected",
+                "Please add and select an image in the queue table first to test tagging."
+            )
+            return
+        self._tag_specific_item(selected_path)
+
+    def _on_single_tag_progress(self, msg: str):
+        self.lbl_status.setText(msg)
+        self.log(f"[SmolVLM] {msg}")
+
     def _on_single_tag_finished(self, file_path: str, tags: list):
+        self.settings_widget.btn_test_tag.setEnabled(True)
+        self.settings_widget.btn_test_tag.setText("🔍 Test Tagging Selected Image")
         self.queue_widget.update_item_status(file_path, "Tags Ready", tags=tags)
         self.preview_widget.update_tags(tags)
-        self.lbl_status.setText("Tagging complete.")
-        self.log(f"SmolVLM identified tags for {Path(file_path).name}: {tags}")
+        self.lbl_status.setText(f"Identified {len(tags)} tags for {Path(file_path).name}.")
+        self.log(f"SmolVLM tags for {Path(file_path).name}: {tags}")
+        # Switch to Preview Tab to immediately view tags
+        self.right_container.setCurrentIndex(1)
 
     def _on_single_tag_error(self, file_path: str, err: str):
+        self.settings_widget.btn_test_tag.setEnabled(True)
+        self.settings_widget.btn_test_tag.setText("🔍 Test Tagging Selected Image")
         self.lbl_status.setText("Tagging error.")
         self.log(f"Error during tagging {file_path}: {err}")
+        QMessageBox.warning(self, "Tagging Error", f"Failed to tag {Path(file_path).name}:\n{err}")
 
     def start_conversion(self):
         if not self.queue_widget.items:
@@ -271,7 +297,8 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
 
         mode_str = "Lossless Reversible" if options.mode == "lossless" else "Lossy Fresh"
-        self.lbl_status.setText(f"Converting {len(paths)} files ({mode_str})...")
+        tagging_status = "with AI Auto-Tagging" if options.enable_ai_tagging else "without AI Tagging"
+        self.lbl_status.setText(f"Converting {len(paths)} files ({mode_str} | {tagging_status})...")
 
         self.worker = BatchWorker(paths, options, item_tags)
         self.worker.item_started.connect(self._on_item_started)

@@ -26,12 +26,12 @@ def create_application() -> QApplication:
     app.setApplicationDisplayName("JAJCE — Just Another JPEG Conversion Engine")
     app.setStyleSheet(DARK_THEME_QSS)
 
-    # Set icon
+    # Set icon with 10.png as top priority
     icon_candidates = [
+        Path(r"C:\Users\Aaron\Downloads\writref\10.png"),
         Path(__file__).resolve().parent.parent / "assets" / "icon.ico",
         Path(__file__).resolve().parent.parent / "assets" / "icon.png",
         Path(r"C:\Users\Aaron\Downloads\writref.png"),
-        Path(r"C:\Users\Aaron\Downloads\writref\writref.png"),
     ]
     for c in icon_candidates:
         if c.exists():
