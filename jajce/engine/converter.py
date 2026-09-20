@@ -152,7 +152,7 @@ class ImageConverter:
             cmd = [cjxl_bin, actual_input, str(out_p)]
 
             # Always ensure container format is used so metadata boxes can be stored
-            cmd.extend(["--container=1"])
+            cmd.extend(["--container=1", "--compress_boxes=0"])
 
             # Mode selection
             if options.mode == "lossless":

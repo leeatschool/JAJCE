@@ -16,7 +16,7 @@ class MetadataManager:
     def generate_xmp_bytes(tags: List[str], description: str = "") -> bytes:
         """
         Generates standard UTF-8 encoded XMP XML containing tags across Dublin Core,
-        IPTC Core, and Windows Photo schemas for maximum viewer compatibility.
+        IPTC Core, Lightroom, and Windows Photo schemas for maximum viewer compatibility.
         """
         cleaned_tags = [t.strip() for t in tags if t.strip()]
         tag_items = "\n".join([f"          <rdf:li>{xml_escape(t)}</rdf:li>" for t in cleaned_tags])
@@ -30,7 +30,8 @@ class MetadataManager:
     xmlns:dc="http://purl.org/dc/elements/1.1/"
     xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"
     xmlns:pdf="http://ns.adobe.com/pdf/1.3/"
-    xmlns:MicrosoftPhoto="http://ns.microsoft.com/photo/1.0/">
+    xmlns:MicrosoftPhoto="http://ns.microsoft.com/photo/1.0/"
+    xmlns:lr="http://ns.adobe.com/lightroom/1.0/">
    <dc:subject>
     <rdf:Bag>
 {tag_items}
@@ -47,6 +48,21 @@ class MetadataManager:
 {tag_items}
     </rdf:Bag>
    </MicrosoftPhoto:LastKeywordXMP>
+   <MicrosoftPhoto:LastKeywordIPTC>
+    <rdf:Bag>
+{tag_items}
+    </rdf:Bag>
+   </MicrosoftPhoto:LastKeywordIPTC>
+   <lr:hierarchicalSubject>
+    <rdf:Bag>
+{tag_items}
+    </rdf:Bag>
+   </lr:hierarchicalSubject>
+   <dc:title>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">{desc_escaped}</rdf:li>
+    </rdf:Alt>
+   </dc:title>
    <dc:description>
     <rdf:Alt>
      <rdf:li xml:lang="x-default">{desc_escaped}</rdf:li>
@@ -62,15 +78,20 @@ class MetadataManager:
     def generate_exif_bytes(tags: List[str], description: str = "") -> bytes:
         """
         Generates raw TIFF EXIF payload containing XPKeywords (Windows Explorer Tags),
-        ImageDescription, and UserComment.
+        XPTitle, XPSubject, XPComment, XPAuthor, ImageDescription, and UserComment.
+        Strips the JPEG APP1 'Exif\\0\\0' marker to produce pure TIFF bytes.
         """
         cleaned_tags = [t.strip() for t in tags if t.strip()]
         tags_joined_semi = "; ".join(cleaned_tags)
         tags_joined_comma = ", ".join(cleaned_tags)
         desc_str = description if description else tags_joined_comma
 
-        # XPKeywords is stored as UTF-16LE with null-terminator
+        # XP tags are stored as UTF-16LE byte arrays with null-terminator
         xp_keywords_bytes = (tags_joined_semi + "\0").encode("utf-16le")
+        xp_title_bytes = (tags_joined_comma + "\0").encode("utf-16le")
+        xp_subject_bytes = (desc_str + "\0").encode("utf-16le")
+        xp_comment_bytes = (desc_str + "\0").encode("utf-16le")
+        xp_author_bytes = ("JAJCE / SmolVLM\0").encode("utf-16le")
 
         # UserComment header (8 bytes) + ASCII comment
         user_comment_bytes = b"ASCII\x00\x00\x00" + desc_str.encode("utf-8", errors="replace")
@@ -78,6 +99,10 @@ class MetadataManager:
         zeroth_ifd = {
             piexif.ImageIFD.ImageDescription: desc_str.encode("utf-8", errors="replace"),
             piexif.ImageIFD.XPKeywords: list(xp_keywords_bytes),
+            piexif.ImageIFD.XPTitle: list(xp_title_bytes),
+            piexif.ImageIFD.XPSubject: list(xp_subject_bytes),
+            piexif.ImageIFD.XPComment: list(xp_comment_bytes),
+            piexif.ImageIFD.XPAuthor: list(xp_author_bytes),
             piexif.ImageIFD.Software: b"JAJCE Image Converter (JPEG XL)"
         }
         exif_ifd = {
@@ -93,7 +118,10 @@ class MetadataManager:
             "thumbnail": None
         }
 
-        return piexif.dump(exif_dict)
+        raw = piexif.dump(exif_dict)
+        if raw.startswith(b"Exif\x00\x00"):
+            return raw[6:]
+        return raw
 
     @classmethod
     def read_tags_from_jxl(cls, jxl_path: str) -> List[str]:
@@ -152,6 +180,8 @@ class MetadataManager:
 
             xmp_bytes = cls.generate_xmp_bytes(tags, description)
             exif_bytes = cls.generate_exif_bytes(tags, description)
+            if exif_bytes.startswith(b"Exif\x00\x00"):
+                exif_bytes = exif_bytes[6:]
             # In JXL container, Exif box payload starts with 4-byte offset (0x00000000)
             exif_payload = b"\x00\x00\x00\x00" + exif_bytes
 
